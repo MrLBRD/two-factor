@@ -29,15 +29,15 @@ bold "Build ${SLUG} ${version}"
 # node_modules/qrcode-generator/qrcode.js dans includes/. Sans elle, le plugin
 # est cassé côté navigateur.
 if [ ! -d node_modules/qrcode-generator ]; then
-	echo "  Installation des dépendances npm…"
+	echo "  Installation des dépendances pnpm…"
 	# --ignore-scripts évite le hook preinstall « composer install » : vendor/
 	# n'est pas distribué, composer n'est donc pas nécessaire pour le zip.
-	npm install --ignore-scripts --no-audit --no-fund --silent
+	pnpm install --ignore-scripts --silent
 fi
-ok "dépendances npm présentes"
+ok "dépendances pnpm présentes"
 
 # --- 2. Build Grunt ---------------------------------------------------------
-npx --no-install grunt build >/dev/null 2>&1 || npx grunt build >/dev/null
+pnpm exec grunt build >/dev/null
 [ -d dist ] || die "grunt build n'a pas produit dist/"
 ok "dist/ généré"
 
@@ -48,8 +48,11 @@ QRCODE_PATH="dist/includes/qrcode-generator/qrcode.js"
 [ -f "$QRCODE_PATH" ] || die "${QRCODE_PATH} manquant (dépendance runtime du TOTP)"
 ok "qrcode.js embarqué"
 
-for unwanted in node_modules vendor tests .git .github FORK.md package.json composer.json; do
-	[ -e "dist/${unwanted}" ] && die "dist/ contient ${unwanted}, qui ne doit pas être distribué"
+for unwanted in node_modules vendor tests .git .github FORK.md bin build \
+	package.json composer.json package-lock.json pnpm-lock.yaml; do
+	if [ -e "dist/${unwanted}" ]; then
+		die "dist/ contient ${unwanted}, qui ne doit pas être distribué"
+	fi
 done
 ok "aucun fichier de développement dans dist/"
 

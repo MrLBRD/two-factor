@@ -6,16 +6,29 @@ versions distribuées du plugin officiel.
 
 ## Ce que le fork ajoute
 
-La branche `production` = `master` (miroir d'upstream) + la PR upstream
-[#845](https://github.com/WordPress/two-factor/pull/845) « Add: Site-wide Two-Factor
-enforcement per user role », qui répond à l'issue
-[#846](https://github.com/WordPress/two-factor/issues/846).
+La branche `production` = `master` (miroir d'upstream) + quatre PR upstream ouvertes,
+toutes avec une CI verte sur les 27 checks et mergées ici sans conflit :
 
-Cette PR est ouverte depuis mars 2026, mergeable sans conflit, CI verte sur 24
-combinaisons PHP/WP, et testée par un contributeur tiers. Elle attend une review.
+| PR | Apport | Pourquoi |
+|---|---|---|
+| [#845](https://github.com/WordPress/two-factor/pull/845) | Enforcement 2FA par rôle | La raison d'être du fork ([#846](https://github.com/WordPress/two-factor/issues/846)) |
+| [#927](https://github.com/WordPress/two-factor/pull/927) | Rework du fail-safe des providers | Corrige une régression **de la 0.16.0** ([#871](https://github.com/WordPress/two-factor/issues/871)) |
+| [#917](https://github.com/WordPress/two-factor/pull/917) | Rate-limit avant le pre-processing | Durcissement anti-bruteforce |
+| [#958](https://github.com/WordPress/two-factor/pull/958) | Code de secours vide | Correctif de bug |
 
-Fonctionnellement, elle ajoute à **Réglages → Two-Factor** une section « Two-Factor
-Enforcement » avec une case par rôle. Un utilisateur d'un rôle coché qui n'a pas
+Deux PR ont été écartées volontairement :
+
+- **#882** traite la même issue #871 que #927 par une approche concurrente, née d'une
+  review de #882. Les cumuler produit un conflit : il faut choisir, et #927 est
+  l'approche retenue en amont.
+- **#916 (Passkeys)** ajoute la dépendance composer `lbuchs/webauthn`, ce qui rendrait
+  `vendor/` nécessaire au runtime alors qu'il est exclu de la distribution — le build
+  du zip serait à refondre.
+
+### L'enforcement par rôle en pratique
+
+#845 ajoute à **Réglages → Two-Factor** une section « Two-Factor Enforcement » avec
+une case par rôle. Un utilisateur d'un rôle coché qui n'a pas
 configuré de 2FA se voit injecter le provider Email au login. Le comportement est
 volontairement *fail-closed* : si le provider Email est désactivé au niveau du site,
 l'enforcement ne s'applique pas plutôt que d'injecter un provider (TOTP) qui exigerait
@@ -62,10 +75,41 @@ GITHUB_REPOSITORY=MrLBRD/two-factor ./.github/scripts/upstream-watch.sh --dry-ru
 > les désactive par défaut sur les forks, et suspend les workflows planifiés après
 > 60 jours sans activité sur le dépôt.
 
+## Gestionnaire de paquets : pnpm
+
+Ce fork utilise **pnpm**, pas npm. `pnpm-lock.yaml` a été généré par `pnpm import`
+depuis le `package-lock.json` d'upstream, donc avec les mêmes versions résolues.
+
+> **Après chaque synchronisation qui modifie `package-lock.json`** (Dependabot est
+> très actif en amont), régénérer le lockfile pnpm :
+>
+> ```bash
+> pnpm import && pnpm install
+> ```
+
+Les scripts internes de `package.json` appellent encore `npm run` : ce fichier n'est
+volontairement **pas** modifié, parce que les workflows CI d'upstream (`test.yml`,
+`deploy.yml`) reposent dessus et que Dependabot y touche à chaque bump. Nos propres
+points d'entrée — `bin/build-zip.sh` et les tâches VS Code — contournent ces scripts
+et appellent `pnpm exec` directement.
+
+## Tâches VS Code
+
+`Cmd+Shift+B` lance le build du zip. Les autres via **Terminal → Exécuter la tâche** :
+
+| Tâche | Effet |
+|---|---|
+| Plugin : builder le ZIP | *(défaut)* archive installable |
+| Plugin : builder le ZIP et l'ouvrir dans le Finder | idem + Finder |
+| Tests : suite complète | PHPUnit dans le conteneur |
+| Tests : enforcement par rôle | uniquement le groupe `enforcement` |
+| Lint : PHPCS | WordPress + VIP-Go |
+| Env : démarrer / arrêter | conteneurs wp-env |
+| Veille upstream : test à blanc | vérifie sans créer d'issue |
+
 ## Construire le zip à installer
 
-Tâche VS Code **« Plugin : builder le ZIP »** — tâche de build par défaut, donc
-directement `Cmd+Shift+B`. En ligne de commande :
+En ligne de commande :
 
 ```bash
 ./bin/build-zip.sh
@@ -76,9 +120,11 @@ racine `two-factor/` comme l'exige l'installeur WordPress. Le contenu suit
 `.distignore` : ni `tests/`, ni `node_modules/`, ni `vendor/`, ni fichiers de dev, ni
 fichiers propres au fork.
 
-Le script échoue plutôt que de produire une archive silencieusement cassée si
-`includes/qrcode-generator/qrcode.js` manque — c'est une dépendance runtime copiée
-depuis `node_modules` au build, sans laquelle le QR code TOTP ne s'affiche pas.
+Le script échoue plutôt que de produire une archive silencieusement cassée dans deux
+cas : si `includes/qrcode-generator/qrcode.js` manque — dépendance runtime copiée
+depuis `node_modules` au build, sans laquelle le QR code TOTP ne s'affiche pas — ou si
+un fichier de développement s'est glissé dans `dist/`. Ce second garde-fou a déjà
+servi : `.distignore` ne connaissait pas `pnpm-lock.yaml`, qui partait dans l'archive.
 
 Installation : **Extensions → Ajouter → Téléverser une extension**.
 
@@ -88,8 +134,14 @@ Installation : **Extensions → Ajouter → Téléverser une extension**.
 git fetch upstream
 git checkout master && git merge --ff-only upstream/master   # miroir, jamais de commit propre
 git checkout production && git merge master
-npm run lint && npm test
+pnpm import && pnpm install                                  # si package-lock.json a bougé
+pnpm exec wp-env start
+pnpm exec wp-env run tests-cli --env-cwd=wp-content/plugins/two-factor composer -- test
 ```
+
+Les quatre PR intégrées sont autant de merges à re-résoudre si upstream touche les
+mêmes zones. Quand l'une d'elles est mergée en amont, son merge local devient un
+no-op : elle disparaît naturellement à la synchronisation suivante.
 
 `master` reste un miroir strict d'upstream : ne jamais y committer. Tout ce qui est
 propre au fork vit sur `production`.

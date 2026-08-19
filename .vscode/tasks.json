@@ -38,6 +38,86 @@
 			"problemMatcher": []
 		},
 		{
+			"label": "Tests : suite complète",
+			"detail": "PHPUnit dans le conteneur wp-env (démarrer l'environnement au préalable)",
+			"type": "shell",
+			"command": "pnpm exec wp-env run tests-cli --env-cwd=wp-content/plugins/two-factor composer -- test",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Tests : enforcement par rôle",
+			"detail": "Uniquement le groupe enforcement (PR #845)",
+			"type": "shell",
+			"command": "pnpm exec wp-env run tests-cli --env-cwd=wp-content/plugins/two-factor composer -- test -- --group enforcement",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Lint : PHPCS",
+			"detail": "WordPress + VIP-Go coding standards",
+			"type": "shell",
+			"command": "pnpm exec wp-env run tests-cli --env-cwd=wp-content/plugins/two-factor composer -- lint",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Env : démarrer",
+			"detail": "Démarre les conteneurs Docker de wp-env",
+			"type": "shell",
+			"command": "pnpm exec wp-env start",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Env : arrêter",
+			"detail": "Arrête les conteneurs Docker de wp-env",
+			"type": "shell",
+			"command": "pnpm exec wp-env stop",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
 			"label": "Veille upstream : test à blanc",
 			"detail": "Vérifie les releases et correctifs upstream sans créer d'issue",
 			"type": "shell",
