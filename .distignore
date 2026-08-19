@@ -1,4 +1,6 @@
 # Directories
+/bin/
+/build/
 /.wordpress-org/
 /node_modules/
 /tests/
@@ -17,6 +19,7 @@
 /phpunit*
 /phpstan.*
 /AGENTS.md
+/FORK.md
 /CHANGELOG.md
 /CLAUDE.md
 /CREDITS.md

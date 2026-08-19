@@ -62,6 +62,26 @@ GITHUB_REPOSITORY=MrLBRD/two-factor ./.github/scripts/upstream-watch.sh --dry-ru
 > les désactive par défaut sur les forks, et suspend les workflows planifiés après
 > 60 jours sans activité sur le dépôt.
 
+## Construire le zip à installer
+
+Tâche VS Code **« Plugin : builder le ZIP »** — tâche de build par défaut, donc
+directement `Cmd+Shift+B`. En ligne de commande :
+
+```bash
+./bin/build-zip.sh
+```
+
+Produit `build/two-factor-<version>.zip` (~3 s, 80 Ko), contenant un unique dossier
+racine `two-factor/` comme l'exige l'installeur WordPress. Le contenu suit
+`.distignore` : ni `tests/`, ni `node_modules/`, ni `vendor/`, ni fichiers de dev, ni
+fichiers propres au fork.
+
+Le script échoue plutôt que de produire une archive silencieusement cassée si
+`includes/qrcode-generator/qrcode.js` manque — c'est une dépendance runtime copiée
+depuis `node_modules` au build, sans laquelle le QR code TOTP ne s'affiche pas.
+
+Installation : **Extensions → Ajouter → Téléverser une extension**.
+
 ## Synchroniser avec upstream
 
 ```bash

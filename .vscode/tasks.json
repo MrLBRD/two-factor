@@ -1,0 +1,57 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Plugin : builder le ZIP",
+			"detail": "Génère build/two-factor-<version>.zip, prêt à téléverser dans WordPress",
+			"type": "shell",
+			"command": "./bin/build-zip.sh",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Plugin : builder le ZIP et l'ouvrir dans le Finder",
+			"detail": "Même build, puis sélectionne l'archive dans le Finder",
+			"type": "shell",
+			"command": "./bin/build-zip.sh && open -R \"$(ls -t build/*.zip | head -1)\"",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Veille upstream : test à blanc",
+			"detail": "Vérifie les releases et correctifs upstream sans créer d'issue",
+			"type": "shell",
+			"command": "GITHUB_REPOSITORY=MrLBRD/two-factor ./.github/scripts/upstream-watch.sh --dry-run",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"clear": true,
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		}
+	]
+}

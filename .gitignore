@@ -1,5 +1,6 @@
 # Directories
 /dist/
+/build/
 /node_modules/
 /tests/logs/
 /vendor/
