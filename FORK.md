@@ -25,6 +25,15 @@ Deux PR ont été écartées volontairement :
   `vendor/` nécessaire au runtime alors qu'il est exclu de la distribution — le build
   du zip serait à refondre.
 
+**Validation locale de la combinaison** (19/08/2026, wp-env / PHP 7.4.33) :
+PHPUnit **209 tests, 690 assertions, OK** — dont les 10 tests du groupe
+`enforcement` qui passent avec le rework de #927, ce qui confirme que les deux
+n'entrent pas en conflit. PHPCS 23/23 et PHPStan 0 erreur.
+
+Deux violations PHPCS de la PR #917 ont dû être corrigées ici : sa branche a été
+rebasée le 9 juillet, avant le bump PHP_CodeSniffer 3.13.6 arrivé sur master le
+8 août, si bien que sa CI ne les voit pas.
+
 ### L'enforcement par rôle en pratique
 
 #845 ajoute à **Réglages → Two-Factor** une section « Two-Factor Enforcement » avec
