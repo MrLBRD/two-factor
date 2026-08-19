@@ -501,10 +501,11 @@ class Tests_Two_Factor_Email extends WP_UnitTestCase {
 	 * Verify that a rate-limited POST does not trigger a new email when login_html()
 	 * re-renders the form via authentication_page().
 	 *
-	 * process_provider() blocks the attempt and returns WP_Error; login_html() then
-	 * calls authentication_page() to redisplay the form. If the token were deleted by
-	 * the rate-limit gate, authentication_page() would see no token and send a new email
-	 * on every blocked submission — recreating the flooding vector the rate-limit prevents.
+	 * The process_provider() call blocks the attempt and returns WP_Error; login_html()
+	 * then calls authentication_page() to redisplay the form. If the token were deleted
+	 * by the rate-limit gate, authentication_page() would see no token and send a new
+	 * email on every blocked submission — recreating the flooding vector the rate-limit
+	 * prevents.
 	 *
 	 * @covers Two_Factor_Email::authentication_page
 	 * @covers Two_Factor_Core::process_provider
