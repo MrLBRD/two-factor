@@ -79,10 +79,13 @@ Test à blanc, sans rien créer :
 GITHUB_REPOSITORY=MrLBRD/two-factor ./.github/scripts/upstream-watch.sh --dry-run
 ```
 
-> **À faire une fois après le premier push :** activer les Actions sur le fork
-> (onglet *Actions* → *I understand my workflows, go ahead and enable them*). GitHub
-> les désactive par défaut sur les forks, et suspend les workflows planifiés après
-> 60 jours sans activité sur le dépôt.
+> **Prérequis au déclenchement du cron :** GitHub n'enregistre les workflows
+> `schedule` que depuis la **branche par défaut** du dépôt. `production` doit donc
+> être la branche par défaut du fork, sinon la veille ne partira jamais d'elle-même
+> (la tâche VS Code « Veille upstream » reste utilisable à la main).
+>
+> GitHub suspend par ailleurs les workflows planifiés après 60 jours sans activité
+> sur le dépôt.
 
 ## Gestionnaire de paquets : pnpm
 
