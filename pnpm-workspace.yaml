@@ -1,0 +1,6 @@
+# Scripts d'installation refusés : ces deux paquets (outillage de lint et de
+# test tiré par @wordpress/scripts) livrent leurs binaires précompilés en
+# dépendances optionnelles ; le script ne sert qu'à compiler en repli.
+allowBuilds:
+  '@parcel/watcher': false
+  unrs-resolver: false
