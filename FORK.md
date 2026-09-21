@@ -25,10 +25,15 @@ Deux PR ont été écartées volontairement :
   `vendor/` nécessaire au runtime alors qu'il est exclu de la distribution — le build
   du zip serait à refondre.
 
-**Validation locale de la combinaison** (19/08/2026, wp-env / PHP 7.4.33) :
-PHPUnit **209 tests, 690 assertions, OK** — dont les 10 tests du groupe
+**Validation locale de la combinaison** (21/09/2026, après synchro sur
+`upstream/master` `c8c8823` — wp-env / WordPress 7.1.1 / PHP 7.4.33) :
+PHPUnit **218 tests, 711 assertions, OK** — dont les 10 tests du groupe
 `enforcement` qui passent avec le rework de #927, ce qui confirme que les deux
-n'entrent pas en conflit. PHPCS 23/23 et PHPStan 0 erreur.
+n'entrent pas en conflit. PHPCS 23/23 et PHPStan (niveau 5) 0 erreur.
+
+**Prérequis depuis cette synchro : WordPress 7.0 et PHP 7.4** (upstream les a
+relevés, contre 6.9 et 7.2 auparavant). WordPress refuse d'installer le zip sur
+un site en dessous.
 
 Deux violations PHPCS de la PR #917 ont dû être corrigées ici : sa branche a été
 rebasée le 9 juillet, avant le bump PHP_CodeSniffer 3.13.6 arrivé sur master le
@@ -79,6 +84,11 @@ Test à blanc, sans rien créer :
 GITHUB_REPOSITORY=MrLBRD/two-factor ./.github/scripts/upstream-watch.sh --dry-run
 ```
 
+> **Les issues doivent être activées sur le fork** — GitHub les désactive par
+> défaut sur un fork. Sans elles, la veille échoue au moment de créer l'issue
+> (`the repository has disabled issues`) : c'est ce qui l'a gardée en échec du
+> 20/08 au 21/09/2026.
+>
 > **Prérequis au déclenchement du cron :** GitHub n'enregistre les workflows
 > `schedule` que depuis la **branche par défaut** du dépôt. `production` doit donc
 > être la branche par défaut du fork, sinon la veille ne partira jamais d'elle-même
@@ -98,6 +108,12 @@ depuis le `package-lock.json` d'upstream, donc avec les mêmes versions résolue
 > ```bash
 > pnpm import && pnpm install
 > ```
+
+`pnpm-workspace.yaml` refuse explicitement les scripts d'installation de
+`@parcel/watcher` et `unrs-resolver` (outillage tiré par `@wordpress/scripts`,
+binaires précompilés fournis en dépendances optionnelles). Sans cette décision
+explicite, pnpm 11 fait échouer `pnpm install` (`ERR_PNPM_IGNORED_BUILDS`). Si un
+bump fait apparaître un nouveau paquet dans ce cas, trancher de la même façon.
 
 Les scripts internes de `package.json` appellent encore `npm run` : ce fichier n'est
 volontairement **pas** modifié, parce que les workflows CI d'upstream (`test.yml`,
