@@ -6,30 +6,48 @@ versions distribuées du plugin officiel.
 
 ## Ce que le fork ajoute
 
-La branche `production` = `master` (miroir d'upstream) + quatre PR upstream ouvertes,
-toutes avec une CI verte sur les 27 checks et mergées ici sans conflit :
+La branche `production` = `master` (miroir d'upstream) + les PR upstream encore
+ouvertes qui nous manquent, avec une CI verte et mergées ici sans conflit :
 
 | PR | Apport | Pourquoi |
 |---|---|---|
 | [#845](https://github.com/WordPress/two-factor/pull/845) | Enforcement 2FA par rôle | La raison d'être du fork ([#846](https://github.com/WordPress/two-factor/issues/846)) |
-| [#927](https://github.com/WordPress/two-factor/pull/927) | Rework du fail-safe des providers | Corrige une régression **de la 0.16.0** ([#871](https://github.com/WordPress/two-factor/issues/871)) |
-| [#917](https://github.com/WordPress/two-factor/pull/917) | Rate-limit avant le pre-processing | Durcissement anti-bruteforce |
 | [#958](https://github.com/WordPress/two-factor/pull/958) | Code de secours vide | Correctif de bug |
 
-Deux PR ont été écartées volontairement :
+**Deux des quatre PR d'origine sont arrivées upstream** avec la 0.17.0 et ne sont
+donc plus portées ici : [#927](https://github.com/WordPress/two-factor/pull/927)
+(rework du fail-safe, mergée le 24/09/2026) et
+[#917](https://github.com/WordPress/two-factor/pull/917) (rate-limit avant le
+pre-processing, mergée le 26/09/2026).
 
-- **#882** traite la même issue #871 que #927 par une approche concurrente, née d'une
-  review de #882. Les cumuler produit un conflit : il faut choisir, et #927 est
-  l'approche retenue en amont.
+**#882 n'est plus écartée.** Elle l'avait été comme approche concurrente de #927 sur
+l'issue [#871](https://github.com/WordPress/two-factor/issues/871), au motif que les
+cumuler produisait un conflit. Upstream a finalement mergé les deux, à un jour
+d'écart (#927 le 24/09, #882 le 25/09) : elles se sont ordonnées au lieu de
+s'exclure, #882 étant rebasée par-dessus #927 et prolongeant son travail — le
+changelog de la 0.17.0 lui attribue d'ailleurs le filtre
+`two_factor_fallback_provider_for_user`. Notre implémentation locale de #927 était
+octet pour octet celle d'upstream, d'où l'absence de conflit sur
+`class-two-factor-core.php` lors de la synchro du 28/09.
+
+Une PR reste écartée volontairement :
+
 - **#916 (Passkeys)** ajoute la dépendance composer `lbuchs/webauthn`, ce qui rendrait
   `vendor/` nécessaire au runtime alors qu'il est exclu de la distribution — le build
   du zip serait à refondre.
 
-**Validation locale de la combinaison** (21/09/2026, après synchro sur
-`upstream/master` `c8c8823` — wp-env / WordPress 7.1.1 / PHP 7.4.33) :
-PHPUnit **218 tests, 711 assertions, OK** — dont les 10 tests du groupe
-`enforcement` qui passent avec le rework de #927, ce qui confirme que les deux
-n'entrent pas en conflit. PHPCS 23/23 et PHPStan (niveau 5) 0 erreur.
+**Validation locale de la combinaison** (28/09/2026, après synchro sur
+`upstream/master` au tag `0.17.0` — wp-env / WordPress 7.1 / PHP 7.4) :
+PHPUnit **308 tests, 932 assertions, OK** sur les suites single **et** multisite
+— dont les 10 tests du groupe `enforcement`, ce qui confirme que #845 cohabite
+avec la version upstream du fail-safe. PHPCS 29/29 et PHPStan 0 erreur.
+
+Le saut de 218 à 308 tests vient de la suite multisite apportée par la 0.17.0,
+pas de nouveaux tests ici. Cette synchro exige `npm run composer -- install`
+(nouvelle dépendance `php-stubs/wp-cli-stubs`, le support WP-CLI étant nouveau)
+et `npm install` (lock mis à jour) : sans eux, PHPStan et les linters CSS/JS
+échouent. `npm install` met à jour `@wordpress/env` et réinitialise
+l'environnement Docker, qui doit être relancé par `npm run env start`.
 
 **Prérequis depuis cette synchro : WordPress 7.0 et PHP 7.4** (upstream les a
 relevés, contre 6.9 et 7.2 auparavant). WordPress refuse d'installer le zip sur
@@ -61,6 +79,13 @@ Conséquence contre-intuitive mais décisive : suivre `master` via ce fork rend 
 jour** en sécurité que rester sur la 0.16.0 de wordpress.org. Un correctif mergé mais
 non publié est lisible par tout le monde et appliqué chez personne.
 
+**Le raisonnement se retourne dès qu'upstream publie.** La 0.17.0 du 28/09/2026 a
+livré #989, qui empêche un mot de passe classique de contourner la 2FA sur REST et
+XML-RPC. Entre le 25/09 (merge du correctif) et le 28/09 (synchro ici), c'est ce fork
+qui était en retard sur une version publiée, et donc vulnérable. Suivre `master` ne
+protège que si la synchro est réellement faite : l'avantage tient au rythme
+d'intégration, pas au fork lui-même. C'est ce que la veille doit rendre visible.
+
 C'est pour cette raison que la veille se déclenche sur les **releases** et sur le
 **drift de `master`**, jamais sur le simple merge d'une PR.
 
@@ -75,8 +100,17 @@ C'est pour cette raison que la veille se déclenche sur les **releases** et sur 
 | `upstream-drift` | Des correctifs de sécurité, ou ≥ 25 commits, non intégrés dans `production` | Reporter les correctifs |
 | `upstream-release` | Nouvelle release sans la feature | Intégrer la release |
 
-Le critère de sortie est la présence du marqueur **dans le fichier au tag publié** —
-donc dans du code réellement distribué, pas simplement mergé.
+Le critère de sortie est la présence du marqueur **dans les fichiers au tag publié** —
+donc dans du code réellement distribué, pas simplement mergé. Le marqueur est cherché
+dans `two-factor.php`, `class-two-factor-core.php` et les réglages, pour que la
+détection survive à un déplacement du code pendant la review upstream.
+
+`upstream-release` et `upstream-drift` sont **indépendantes** : l'issue de drift, au
+titre stable donc durablement ouverte, masquait auparavant l'arrivée d'une release
+(c'est ainsi que la 0.17.0 est sortie sans alerte). Une release est jugée intégrée sur
+l'accessibilité de son tag depuis `production`, pas sur une date. Seules les releases
+**stables** comptent : une RC n'est pas distribuée sur wordpress.org et n'est signalée
+qu'à titre informatif.
 
 Test à blanc, sans rien créer :
 
