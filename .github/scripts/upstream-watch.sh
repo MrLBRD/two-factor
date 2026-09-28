@@ -21,9 +21,14 @@ DRY_RUN=false
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=true
 
 # --- 1. Dernière release upstream -------------------------------------------
-release_json="$(gh api "repos/${UPSTREAM}/releases?per_page=1")"
-tag="$(jq -r '.[0].tag_name // empty' <<<"$release_json")"
-published="$(jq -r '.[0].published_at // empty' <<<"$release_json")"
+# /releases/latest exclut les pre-releases et les drafts, contrairement à
+# /releases?per_page=1. C'est la seule lecture qui répond « quelle version est
+# réellement distribuée » : une RC n'est pas publiée sur wordpress.org, elle ne
+# compte donc pas comme livrée (0.17.0-rc nous avait fait annoncer une release
+# qui n'en était pas une).
+release_json="$(gh api "repos/${UPSTREAM}/releases/latest" 2>/dev/null || echo '{}')"
+tag="$(jq -r '.tag_name // empty' <<<"$release_json")"
+published="$(jq -r '.published_at // empty' <<<"$release_json")"
 
 if [ -z "$tag" ]; then
 	echo "Aucune release trouvée sur ${UPSTREAM}, rien à faire."
@@ -38,17 +43,50 @@ else
 fi
 days_old=$(( ( $(date -u +%s) - published_ts ) / 86400 ))
 
-echo "Dernière release upstream : ${tag} (${published:0:10}, il y a ${days_old} j)"
+echo "Dernière release stable upstream : ${tag} (${published:0:10}, il y a ${days_old} j)"
+
+# Une pre-release plus récente que la stable signale une version en préparation :
+# informatif, jamais un critère de distribution.
+prerelease_tag="$(gh api "repos/${UPSTREAM}/releases?per_page=10" \
+	--jq "[.[] | select(.prerelease and .draft == false and .published_at > \"${published}\")][0].tag_name // empty" \
+	2>/dev/null || true)"
+[ -n "$prerelease_tag" ] && echo "Pre-release en préparation upstream : ${prerelease_tag}"
 
 # --- 2. Cette release contient-elle l'enforcement par rôle ? -----------------
-# On lit le fichier AU TAG PUBLIÉ : seule preuve que le code est réellement
+# On lit les fichiers AU TAG PUBLIÉ : seule preuve que le code est réellement
 # distribué, et non simplement mergé sur master.
+# Plusieurs fichiers, car ne sonder que two-factor.php rendrait la détection
+# muette si la review upstream déplaçait l'option dans une classe — on manquerait
+# alors la seule chose que ce script existe pour voir.
+FEATURE_FILES="${FEATURE_FILES:-two-factor.php class-two-factor-core.php settings/class-two-factor-settings.php}"
 feature_shipped=false
-if gh api "repos/${UPSTREAM}/contents/two-factor.php?ref=${tag}" --jq '.content' 2>/dev/null \
-	| base64 -d 2>/dev/null | grep -q "${FEATURE_MARKER}"; then
-	feature_shipped=true
-fi
+for feature_file in $FEATURE_FILES; do
+	# `grep -c`, pas `grep -q` : sous `set -o pipefail`, un `grep -q` sort dès la
+	# première correspondance, ferme le tube, et `base64` meurt en SIGPIPE (141),
+	# ce qui devient le statut du pipeline — la détection échouait donc
+	# précisément quand le marqueur ÉTAIT présent. Le bug ne se voyait pas sur
+	# two-factor.php (6 Ko : `base64` a fini d'écrire avant que `grep` ne sorte),
+	# mais il est systématique dès que le fichier dépasse le buffer du tube.
+	# `grep -c` lit le flux jusqu'au bout, donc pas de SIGPIPE ; `|| true`
+	# absorbe le statut 1 du cas « aucune correspondance ».
+	hits="$(gh api "repos/${UPSTREAM}/contents/${feature_file}?ref=${tag}" --jq '.content' 2>/dev/null \
+		| base64 -d 2>/dev/null | grep -c "${FEATURE_MARKER}" || true)"
+	if [ "${hits:-0}" -gt 0 ]; then
+		feature_shipped=true
+		echo "Marqueur ${FEATURE_MARKER} trouvé dans ${feature_file}@${tag}"
+		break
+	fi
+done
 echo "Enforcement par rôle distribué dans ${tag} : ${feature_shipped}"
+
+# --- 2b. La release est-elle déjà intégrée chez nous ? -----------------------
+# Ce qui distingue « une version vient de sortir » de « on l'a déjà mergée »
+# n'est pas une date mais l'accessibilité du tag depuis notre branche.
+release_integrated=false
+if cmp_tag_json="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${FORK_BRANCH}...${UPSTREAM%%/*}:${tag}" 2>/dev/null)"; then
+	[ "$(jq -r '.ahead_by // "x"' <<<"$cmp_tag_json")" = "0" ] && release_integrated=true
+fi
+echo "Release ${tag} déjà intégrée dans ${FORK_BRANCH} : ${release_integrated}"
 
 # --- 3. Retard de notre branche sur master upstream -------------------------
 # Comparaison faite DEPUIS notre fork : base = notre branche, head = master
@@ -132,10 +170,46 @@ EOF
 	exit 0
 fi
 
-# --- Alerte drift : indépendante des releases -------------------------------
-# Sans ce bloc, une absence prolongée de release upstream (le cas actuel) ne
-# déclencherait aucune alerte alors que les correctifs s'accumulent sur master.
-if [ "$behind" != "inconnu" ] && [ "${behind:-0}" -gt 0 ] \
+# --- Alerte release : une version publiée qui n'est pas encore chez nous -----
+# Évaluée AVANT le drift et indépendamment de lui. Les deux étaient auparavant
+# exclusives (if/elif) : l'issue drift, au titre stable donc perpétuellement
+# ouverte, absorbait le run et une release pouvait sortir sans que rien n'alerte.
+# C'est exactement ce qui s'est produit avec la 0.17.0.
+# Le titre porte le tag : une issue par version, idempotent sans stockage d'état.
+release_alerted=false
+if [ "$release_integrated" = false ] && [ -n "$tag" ]; then
+	{
+		echo "Release stable upstream **${tag}** publiée le ${published:0:10} (il y a ${days_old} j)."
+		echo
+		echo "Elle **ne contient pas** \`${FEATURE_MARKER}\` : le fork reste nécessaire."
+		echo
+		echo "- Commits de \`master\` non intégrés ici : **${behind}**"
+		echo "- PR #${UPSTREAM_PR} : ${pr_state}"
+		[ "${sec_count:-0}" -gt 0 ] && echo "- Correctifs touchant à la sécurité non intégrés : **${sec_count}**"
+		[ -n "$prerelease_tag" ] && echo "- Pre-release en préparation : ${prerelease_tag}"
+		echo
+		echo "**À faire** :"
+		echo
+		echo '```bash'
+		echo "git fetch upstream"
+		echo "git checkout -b sync-${tag} ${FORK_BRANCH}"
+		echo "git merge upstream/master"
+		echo "npm run lint && npm test"
+		echo '```'
+	} > "$body_file"
+
+	open_issue \
+		"Upstream ${tag} publiée — à intégrer dans ${FORK_BRANCH}" \
+		"upstream-release" \
+		"$body_file"
+	release_alerted=true
+fi
+
+# --- Alerte drift : des correctifs sur master, distribués dans aucune version -
+# Le cas qui justifie le fork : upstream merge des fix puis ne publie pas.
+# Sautée si l'alerte release vient d'être émise : elle porte déjà le compte des
+# correctifs de sécurité et appelle la même action, inutile d'ouvrir deux issues.
+if [ "$release_alerted" = false ] && [ "$behind" != "inconnu" ] && [ "${behind:-0}" -gt 0 ] \
 	&& { [ "${sec_count:-0}" -gt 0 ] || [ "${behind}" -ge "${DRIFT_THRESHOLD}" ]; }; then
 
 	{
@@ -165,19 +239,6 @@ if [ "$behind" != "inconnu" ] && [ "${behind:-0}" -gt 0 ] \
 		"upstream-drift" \
 		"$body_file"
 
-elif [ "$behind" != "inconnu" ] && [ "${behind:-0}" -gt 0 ]; then
-	cat > "$body_file" <<EOF
-Release upstream **${tag}** publiée le ${published:0:10}.
-
-Elle **ne contient pas** l'enforcement par rôle : le fork reste nécessaire.
-
-- Commits de \`master\` non intégrés ici : **${behind}**
-- PR #${UPSTREAM_PR} : ${pr_state}
-EOF
-	open_issue \
-		"Upstream ${tag} publiée — à intégrer dans ${FORK_BRANCH}" \
-		"upstream-release" \
-		"$body_file"
-else
+elif [ "$release_alerted" = false ]; then
 	echo "Rien à signaler."
 fi
