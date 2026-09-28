@@ -346,9 +346,14 @@ class Two_Factor_Email extends Two_Factor_Provider {
 			return;
 		}
 
-		if ( ! $this->user_has_token( $user->ID ) || $this->user_token_has_expired( $user->ID ) ) {
-			$this->generate_and_email_token( $user );
+		$is_rate_limited = Two_Factor_Core::is_user_rate_limited( $user );
+
+		if ( ! $is_rate_limited ) {
+			if ( ! $this->user_has_token( $user->ID ) || $this->user_token_has_expired( $user->ID ) ) {
+				$this->generate_and_email_token( $user );
+			}
 		}
+		$has_valid_token = $this->user_has_token( $user->ID ) && ! $this->user_token_has_expired( $user->ID );
 
 		$token_length      = $this->get_token_length();
 		$token_placeholder = str_repeat( 'X', $token_length );
@@ -359,22 +364,24 @@ class Two_Factor_Email extends Two_Factor_Provider {
 		/** This action is documented in providers/class-two-factor-backup-codes.php */
 		do_action( 'two_factor_before_authentication_prompt', $this );
 		?>
+		<?php if ( $has_valid_token ) : ?>
 		<p class="two-factor-prompt"><?php esc_html_e( 'A verification code has been sent to the email address associated with your account.', 'two-factor' ); ?></p>
+		<?php endif; ?>
 		<?php
 		/** This action is documented in providers/class-two-factor-backup-codes.php */
 		do_action( 'two_factor_after_authentication_prompt', $this );
 		?>
 		<p>
 			<label for="authcode"><?php esc_html_e( 'Verification Code:', 'two-factor' ); ?></label>
-			<input type="text" inputmode="numeric" name="two-factor-email-code" id="authcode" class="input authcode" value="" size="20" pattern="[0-9 ]*" autocomplete="one-time-code" placeholder="<?php echo esc_attr( $token_placeholder ); ?>" data-digits="<?php echo esc_attr( (string) $token_length ); ?>" />
+			<input type="text" inputmode="numeric" name="two-factor-email-code" id="authcode" class="input authcode" value="" size="20" pattern="[0-9 ]*" autocomplete="one-time-code" placeholder="<?php echo esc_attr( $token_placeholder ); ?>" data-digits="<?php echo esc_attr( (string) $token_length ); ?>">
 		</p>
 		<?php
 		/** This action is documented in providers/class-two-factor-backup-codes.php */
 		do_action( 'two_factor_after_authentication_input', $this );
 		?>
-		<?php submit_button( __( 'Verify', 'two-factor' ) ); ?>
+		<?php submit_button( __( 'Verify', 'two-factor' ), 'primary', 'submit', true, $is_rate_limited ? 'disabled="disabled"' : '' ); ?>
 		<p class="two-factor-email-resend">
-			<input type="submit" class="button" name="<?php echo esc_attr( self::INPUT_NAME_RESEND_CODE ); ?>" value="<?php esc_attr_e( 'Resend Code', 'two-factor' ); ?>" />
+			<input type="submit" class="button" name="<?php echo esc_attr( self::INPUT_NAME_RESEND_CODE ); ?>" value="<?php esc_attr_e( 'Resend Code', 'two-factor' ); ?>" <?php disabled( $is_rate_limited ); ?>>
 		</p>
 		<?php wp_enqueue_script( 'two-factor-login' ); ?>
 		<?php
@@ -445,7 +452,7 @@ class Two_Factor_Email extends Two_Factor_Provider {
 	public function user_options( $user ) {
 		$email = $user->user_email;
 		?>
-		<p>
+		<p class="description">
 			<?php
 			echo esc_html(
 				sprintf(

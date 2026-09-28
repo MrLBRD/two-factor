@@ -12,6 +12,7 @@
 /composer.lock
 /docker-compose.yml
 /Gruntfile.js
+/eslint.config.js
 /npm-debug.log
 /package.json
 /package-lock.json

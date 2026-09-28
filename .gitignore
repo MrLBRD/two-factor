@@ -8,5 +8,5 @@
 # Files
 .DS_Store
 /npm-debug.log
-.phpunit.result.cache
+.phpunit.result.cache*
 phpstan.neon
