@@ -1,6 +1,10 @@
-# Scripts d'installation refusés : ces deux paquets (outillage de lint et de
-# test tiré par @wordpress/scripts) livrent leurs binaires précompilés en
-# dépendances optionnelles ; le script ne sert qu'à compiler en repli.
+# Scripts d'installation refusés : ces paquets (outillage tiré par
+# @wordpress/scripts et @wordpress/env) livrent leurs binaires précompilés
+# (ou, pour core-js, n'affichent qu'un message de financement) ; le script ne
+# sert qu'à compiler en repli.
 allowBuilds:
   '@parcel/watcher': false
+  core-js: false
+  core-js-pure: false
+  fs-ext-extra-prebuilt: false
   unrs-resolver: false
