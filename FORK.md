@@ -12,7 +12,11 @@ ouvertes qui nous manquent, avec une CI verte et mergées ici sans conflit :
 | PR | Apport | Pourquoi |
 |---|---|---|
 | [#845](https://github.com/WordPress/two-factor/pull/845) | Enforcement 2FA par rôle | La raison d'être du fork ([#846](https://github.com/WordPress/two-factor/issues/846)) |
-| [#958](https://github.com/WordPress/two-factor/pull/958) | Code de secours vide | Correctif de bug |
+
+**#958 (code de secours vide) a été mergée upstream le 28/09/2026** et n'est plus portée
+ici depuis la synchro du 21/11/2026, qui embarque aussi la dernière révision de #845
+(verrouillage de la case Email imposée sur le profil, super admins concernés en
+multisite). #845 est approuvée et jalonnée 0.18.0.
 
 **Deux des quatre PR d'origine sont arrivées upstream** avec la 0.17.0 et ne sont
 donc plus portées ici : [#927](https://github.com/WordPress/two-factor/pull/927)
