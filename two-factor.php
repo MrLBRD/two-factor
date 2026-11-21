@@ -11,7 +11,7 @@
  * Plugin Name:       Two Factor
  * Plugin URI:        https://wordpress.org/plugins/two-factor/
  * Description:       Enable Two-Factor Authentication using time-based one-time passwords, email, and backup verification codes.
- * Requires at least: 7.0
+ * Requires at least: 6.8
  * Version:           0.17.0
  * Requires PHP:      7.4
  * Author:            WordPress.org Contributors
@@ -158,8 +158,8 @@ function two_factor_filter_enabled_providers( $providers ) {
 	}
 
 	// On the settings page itself, show all providers so admins can change the selection.
-	$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading the current admin page slug only; no state change occurs here.
-	if ( is_admin() && 'two-factor-settings' === $page ) {
+	$current_screen = is_admin() ? get_current_screen() : false;
+	if ( $current_screen && 'settings_page_two-factor-settings' === $current_screen->base ) {
 		return $providers;
 	}
 
@@ -194,6 +194,52 @@ function two_factor_filter_enabled_providers_for_user( $enabled, $user_id ) { //
 }
 
 /**
+ * Whether a user belongs to a role for which Two-Factor is enforced.
+ *
+ * On multisite, the `super_admin` pseudo-role matches network super admins,
+ * who may have no role on the current site.
+ *
+ * @since 0.18.0
+ *
+ * @param int $user_id The user ID.
+ * @return bool
+ */
+function two_factor_user_has_enforced_role( $user_id ) {
+	$enforced_roles = (array) get_option( 'two_factor_enforced_roles', array() );
+	if ( empty( $enforced_roles ) ) {
+		return false;
+	}
+
+	$user = get_userdata( $user_id );
+	if ( ! $user ) {
+		return false;
+	}
+
+	if ( is_multisite() && in_array( 'super_admin', $enforced_roles, true ) && is_super_admin( $user_id ) ) {
+		return true;
+	}
+
+	return ! empty( array_intersect( (array) $user->roles, $enforced_roles ) );
+}
+
+/**
+ * Whether Two-Factor is enforced for a user via their role.
+ *
+ * @since 0.18.0
+ *
+ * @param int $user_id The user ID.
+ * @return bool
+ */
+function two_factor_is_user_enforced( $user_id ) {
+	if ( ! two_factor_user_has_enforced_role( $user_id ) ) {
+		return false;
+	}
+
+	$site_enabled = two_factor_get_enabled_providers_option();
+	return null === $site_enabled || in_array( 'Two_Factor_Email', $site_enabled, true );
+}
+
+/**
  * Enforce Two-Factor for users in roles that require it.
  *
  * Runs after the site-enabled filter (priority 20). If a user belongs to an
@@ -204,7 +250,7 @@ function two_factor_filter_enabled_providers_for_user( $enabled, $user_id ) { //
  * providers (e.g. TOTP) require per-user setup before they can authenticate,
  * so injecting them without prior configuration would silently fail open.
  *
- * @since 0.16
+ * @since 0.18.0
  *
  * @param array $enabled  Currently enabled provider classnames for the user.
  * @param int   $user_id  The user ID.
@@ -216,18 +262,7 @@ function two_factor_enforce_for_user( $enabled, $user_id ) {
 		return $enabled;
 	}
 
-	$enforced_roles = (array) get_option( 'two_factor_enforced_roles', array() );
-	if ( empty( $enforced_roles ) ) {
-		return $enabled;
-	}
-
-	$user = get_userdata( $user_id );
-	if ( ! $user ) {
-		return $enabled;
-	}
-
-	// Check whether the user has at least one enforced role.
-	if ( empty( array_intersect( (array) $user->roles, $enforced_roles ) ) ) {
+	if ( ! two_factor_user_has_enforced_role( $user_id ) ) {
 		return $enabled;
 	}
 
@@ -250,25 +285,17 @@ add_filter( 'two_factor_enabled_providers_for_user', 'two_factor_enforce_for_use
  * Fires immediately after a new user account is created so that enforced
  * users are required to verify via email on their very first login.
  *
- * @since 0.16
+ * @since 0.18.0
  *
  * @param int $user_id The newly registered user ID.
  * @return void
  */
 function two_factor_force_on_user_register( $user_id ) {
-	$enforced_roles = (array) get_option( 'two_factor_enforced_roles', array() );
-	if ( empty( $enforced_roles ) ) {
+	if ( ! two_factor_user_has_enforced_role( $user_id ) ) {
 		return;
 	}
 
 	$user = get_userdata( $user_id );
-	if ( ! $user ) {
-		return;
-	}
-
-	if ( empty( array_intersect( (array) $user->roles, $enforced_roles ) ) ) {
-		return;
-	}
 
 	// Do not overwrite a configuration that already exists.
 	$existing = get_user_meta( $user_id, Two_Factor_Core::ENABLED_PROVIDERS_USER_META_KEY, true );
@@ -293,3 +320,28 @@ function two_factor_force_on_user_register( $user_id ) {
 	update_user_meta( $user_id, Two_Factor_Core::PROVIDER_USER_META_KEY, 'Two_Factor_Email' );
 }
 add_action( 'user_register', 'two_factor_force_on_user_register', 10, 1 );
+
+/**
+ * Check if a user action is valid.
+ *
+ * @since 0.18.0
+ *
+ * @param integer $user_id User ID.
+ * @param string  $action User action ID.
+ *
+ * @return boolean
+ */
+function two_factor_is_valid_user_action( $user_id, $action ) {
+	$request_nonce = isset( $_REQUEST[ Two_Factor_Core::USER_SETTINGS_ACTION_NONCE_QUERY_ARG ] ) && is_scalar( $_REQUEST[ Two_Factor_Core::USER_SETTINGS_ACTION_NONCE_QUERY_ARG ] )
+		? sanitize_text_field( wp_unslash( $_REQUEST[ Two_Factor_Core::USER_SETTINGS_ACTION_NONCE_QUERY_ARG ] ) )
+		: '';
+
+	if ( ! $user_id || ! $action || ! $request_nonce ) {
+		return false;
+	}
+
+	return wp_verify_nonce(
+		$request_nonce,
+		sprintf( '%d-%s', $user_id, $action )
+	);
+}
